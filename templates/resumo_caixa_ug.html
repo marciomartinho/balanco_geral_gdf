@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Detalhe Conta Contábil por UG</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f0f2f5; }
+        .header { background-color: #4A90E2; color: white; padding: 15px 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .panel { border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
+        .panel-header { font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+        .filters { display: grid; grid-template-columns: auto 1fr auto 3fr auto; gap: 15px; align-items: center; margin-bottom: 20px; }
+        label { font-weight: bold; }
+        select, button { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        button { background-color: #28a745; color: white; cursor: pointer; border-color: #28a745; }
+        button:hover { background-color: #218838; }
+        #loader { text-align: center; padding: 30px; display: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; }
+        thead { background-color: #f2f2f2; }
+        tfoot { font-weight: bold; background-color: #f8f8f8; }
+        .text-right { text-align: right; }
+        .total-row td { border-top: 2px solid #333; }
+        .group-start-cell { font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Sistema Integrado de Administração Contábil</h1>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <div class="panel-header">PSIAC025 - Detalhe Conta Contábil</div>
+            
+            <div class="filters">
+                <label for="ano">Exercício:</label>
+                <select id="ano"></select>
+                
+                <label for="ug">Unidade Gestora:</label>
+                <select id="ug" disabled></select>
+                
+                <button id="pesquisar" disabled>Pesquisar</button>
+            </div>
+
+            <div id="loader">
+                <p>Carregando...</p>
+            </div>
+
+            <div id="resultado" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Conta Contábil</th>
+                            <th>Conta Corrente</th>
+                            <th class="text-right">Mov. Devedor</th>
+                            <th class="text-right">Mov. Credor</th>
+                            <th class="text-right">Saldo Atual</th>
+                            <th>D/C</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                    <tfoot id="table-foot"></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const selAno = document.getElementById('ano');
+            const selUg = document.getElementById('ug');
+            const btnPesquisar = document.getElementById('pesquisar');
+            const loader = document.getElementById('loader');
+            const resultadoDiv = document.getElementById('resultado');
+            const tableBody = document.getElementById('table-body');
+            const tableFoot = document.getElementById('table-foot');
+
+            function formatarMoeda(valor) {
+                return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(valor);
+            }
+
+            // Carregar anos
+            fetch('/api/filtros/anos')
+                .then(res => res.json())
+                .then(anos => {
+                    selAno.innerHTML = '<option value="">Selecione...</option>';
+                    anos.forEach(ano => {
+                        const option = new Option(ano, ano);
+                        selAno.add(option);
+                    });
+                });
+
+            // Carregar UGs ao selecionar ano
+            selAno.addEventListener('change', () => {
+                const ano = selAno.value;
+                selUg.innerHTML = '<option value="">Carregando...</option>';
+                selUg.disabled = true;
+                btnPesquisar.disabled = true;
+                resultadoDiv.style.display = 'none';
+                if (!ano) {
+                    selUg.innerHTML = '<option value="">Selecione um ano</option>';
+                    return;
+                }
+
+                fetch(`/api/filtros/ugs?ano=${ano}`)
+                    .then(res => res.json())
+                    .then(ugs => {
+                        selUg.innerHTML = '<option value="">Selecione uma UG...</option>';
+                        ugs.forEach(ug => {
+                            const option = new Option(`${ug.COUG} - ${ug.NOUG}`, ug.COUG);
+                            selUg.add(option);
+                        });
+                        selUg.disabled = false;
+                    });
+            });
+            
+            selUg.addEventListener('change', () => {
+                btnPesquisar.disabled = !selUg.value;
+            });
+
+            // Ação de pesquisa
+            btnPesquisar.addEventListener('click', () => {
+                const ano = selAno.value;
+                const ug = selUg.value;
+
+                if (!ano || !ug) {
+                    alert('Por favor, selecione o ano e a Unidade Gestora.');
+                    return;
+                }
+
+                loader.style.display = 'block';
+                resultadoDiv.style.display = 'none';
+                tableBody.innerHTML = '';
+                tableFoot.innerHTML = '';
+
+                fetch(`/api/caixa/resumo_ug?ano=${ano}&ug=${ug}`)
+                    .then(res => res.json())
+                    .then(response => {
+                        loader.style.display = 'none';
+                        if (response.sucesso) {
+                            let ultimaContaContabil = null;
+
+                            // Preencher corpo da tabela
+                            response.dados.forEach(row => {
+                                const tr = document.createElement('tr');
+                                
+                                let contaContabilCell = `<td>${row.COCONTACONTABIL}</td>`;
+                                if (row.COCONTACONTABIL === ultimaContaContabil) {
+                                    // Se for a mesma do anterior, deixa a célula em branco
+                                    contaContabilCell = '<td></td>';
+                                } else {
+                                    // Marca a primeira célula de um novo grupo
+                                    contaContabilCell = `<td class="group-start-cell">${row.COCONTACONTABIL}</td>`;
+                                }
+
+                                tr.innerHTML = `
+                                    ${contaContabilCell}
+                                    <td>${row.COCONTACORRENTE}</td>
+                                    <td class="text-right">${formatarMoeda(row.TOTAL_DEBITO)}</td>
+                                    <td class="text-right">${formatarMoeda(row.TOTAL_CREDITO)}</td>
+                                    <td class="text-right">${formatarMoeda(Math.abs(row.SALDO))}</td>
+                                    <td>${row.DC}</td>
+                                `;
+                                tableBody.appendChild(tr);
+                                ultimaContaContabil = row.COCONTACONTABIL;
+                            });
+
+                            // Preencher rodapé com totais
+                            const totais = response.totais;
+                            const trFoot = document.createElement('tr');
+                            trFoot.className = 'total-row';
+                            trFoot.innerHTML = `
+                                <td colspan="2">TOTAL</td>
+                                <td class="text-right">${formatarMoeda(totais.TOTAL_DEBITO)}</td>
+                                <td class="text-right">${formatarMoeda(totais.TOTAL_CREDITO)}</td>
+                                <td class="text-right">${formatarMoeda(Math.abs(totais.SALDO))}</td>
+                                <td>${totais.DC}</td>
+                            `;
+                            tableFoot.appendChild(trFoot);
+
+                            resultadoDiv.style.display = 'block';
+                        } else {
+                            alert('Erro ao buscar dados: ' + response.erro);
+                        }
+                    })
+                    .catch(err => {
+                        loader.style.display = 'none';
+                        alert('Ocorreu um erro de comunicação com o servidor.');
+                        console.error(err);
+                    });
+            });
+        });
+    </script>
+</body>
+</html>
