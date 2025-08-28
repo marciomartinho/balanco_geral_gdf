@@ -1,0 +1,33 @@
+# Ambiente virtual
+venv/
+env/
+.venv/
+
+# Variáveis de ambiente
+.env
+
+# Arquivos de cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+*.log
+
+# Bancos de dados locais (opcional, mas recomendado)
+*.db
+*.sqlite3
+
+# IDEs e editores
+.vscode/
+.idea/
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+
+# Dados brutos e bancos de dados que não devem ir para o repositório
+dados/
+
+# Ignorar pasta de cache
+cache/
